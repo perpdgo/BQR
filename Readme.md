@@ -1,1 +1,1 @@
-#Bayesian Quantile Regression with Variable selection
+## Bayesian Quantile Regression with Variable selection
