@@ -1,12 +1,16 @@
 
-library(GIGrvg)
+rm(list=ls())
 
-# función de pérdida.
-check_loss<-function(t,theta){
+library(GIGrvg)
+library(BGLR)
+
+#Check loss function
+check_loss<-function(t,theta)
+  {
  ifelse(t<0,(theta-1)*t,theta*t)
 }
 
-# función de la log-apriori.
+#Compute the logarithm of the prior
 log_prior <- function(b, d, varB, tau, mu, pin, prior_dist, a_hyp, b_hyp, c_hyp, d_hyp) {
  
   log_p_b <- sum(dnorm(b, mean = 0, sd = sqrt(varB), log = TRUE))
@@ -14,8 +18,7 @@ log_prior <- function(b, d, varB, tau, mu, pin, prior_dist, a_hyp, b_hyp, c_hyp,
   log_p_d <- sum(d * log(pin) + (1 - d) * log(1 - pin))
   
   if (length(b_hyp) != 1L) {
-    stop("log_prior(): 'b_hyp' debe ser escalar (rate de la Gamma de tau). ",
-         "Parece que se pasó el vector de coeficientes 'b'.")
+    stop("log_prior(): 'b_hyp' must be an scalar (rate parameter for the Gamma distribution)")
   }
   
   if (prior_dist$class == "Inv-chi-square") {
@@ -26,7 +29,7 @@ log_prior <- function(b, d, varB, tau, mu, pin, prior_dist, a_hyp, b_hyp, c_hyp,
     Sb <- prior_dist$Sb
     log_p_varB <- log(2) - log(pi) - log(Sb) - log(1 + (varB / Sb)^2)
   } else {
-    stop("Distribución a priori no válida. Usar 'Inv-chi-square' o 'Half-Cauchy'.")
+    stop("Prior distribution is not valid, use 'Inv-chi-square' or 'Half-Cauchy'.")
   }
   
   log_p_tau <- (a_hyp - 1) * log(tau) - b_hyp * tau
@@ -40,7 +43,7 @@ log_prior <- function(b, d, varB, tau, mu, pin, prior_dist, a_hyp, b_hyp, c_hyp,
   return(log_prior_total)
 }
 
-# generar la función de la logLike aumentada.
+# Augmented log-likelihood
 log_likeA <- function(y, X, beta, mu, tau, v, e1, e2) 
 {
   n <- length(y)
@@ -56,7 +59,7 @@ log_likeA <- function(y, X, beta, mu, tau, v, e1, e2)
   return(ll)
 }
 
-# función BRQRC.
+# BQRVS function
 BRQRC <- function(y, X, 
                   intercept = TRUE, 
                   theta = 0.50, 
@@ -92,7 +95,7 @@ BRQRC <- function(y, X,
     if(prior_dist$class=="Inv-chi-square")
     {
       
-      message("Ha seleccionado la distribución Inv-chi-square\n")
+      message("You have selectd the Inv-chi-square prior\n")
       
       if(is.null(prior_dist$Sb))
       {
@@ -105,22 +108,22 @@ BRQRC <- function(y, X,
         cat("Sb=",prior_dist$Sb,"\n")
       }
     }else{
-      message("Ha seleccionado la distribución Half-Cauchy\n")
+      message("You have selected the Half-Cauchy prior\n")
       
       if(is.null(prior_dist$dfb))
       {
         prior_dist$dfb = 1
-        message("dfb se fijó a ", prior_dist$dfb,"\n")
+        message("dfb was set to ", prior_dist$dfb,"\n")
       }
       if(is.null(prior_dist$Sb))
       {
         prior_dist$Sb = sd(y)/mean(apply(X,2,sd))
-        message("Sb se fijó a ", prior_dist$Sb,"\n")
+        message("Sb was set to ", prior_dist$Sb,"\n")
       }
     }
     
   }else{
-    stop("class deber ser 'Inv-chi-square' o 'Half-Cauchy' \n")
+    stop("The prior must be 'Inv-chi-square' or 'Half-Cauchy' \n")
   }
   
   varB <- 0.10            
@@ -235,7 +238,7 @@ BRQRC <- function(y, X,
       
       if(varBtmp < 1e-3 || varBtmp > 1e3) 
       {
-        cat("warning: varB not updated\n")
+        cat("warning: varB was not updated\n")
         
         vVarB[iter]<-varB
         
@@ -284,7 +287,7 @@ BRQRC <- function(y, X,
     
     time1 <- proc.time()[3]
     
-    if(verbose) cat("tiempo/iteración=", round(time1-time0,4)," segundos \n")
+    if(verbose) cat("time/iter=", round(time1-time0,4)," seconds \n")
     
   }
   
@@ -332,3 +335,63 @@ BRQRC <- function(y, X,
 
   return(out)
 }
+
+################################################################################
+#Example 1,  Kuo and Mallick (1998)
+################################################################################
+
+p <- 5
+n <- 60
+set.seed(123)
+X <- matrix(rnorm(n * p, mean = 0, sd = 1), nrow = n, ncol = p)
+sigma <- 2.5
+e <- rnorm(n, mean = 0, sd = sigma)
+y <- X[,4] + (1.2 * X[,5]) + e
+
+set.seed(123)
+m1<-BRQRC(y = y, X = X, nIter = 10000, burnIn = 5000, probIn = 0.5,
+             thin = 10, save = TRUE, intercept = FALSE, 
+             file_betas = "betas_1.txt",
+             file_deltas = "deltas_1.txt")
+
+plot(m1$beta, 
+     xlab = "Variable", 
+     ylab = expression(hat(beta)[j]))
+abline(v=which(m1$beta>0.1),col="red",lty=2)
+
+plot(m1$d,
+     xlab = "Variable", 
+     ylab = expression("Inclusion probability"))
+abline(v=which(m1$d>0.5),col="red",lty=2)
+
+################################################################################
+#Example 2
+################################################################################
+
+library(BGLR)
+set.seed(12345)
+data(mice)
+p <- 1000
+n <- 1000
+X <- scale(mice.X[1:n, 1:p])
+QTL <- seq(from=50, to=p-50, by=80)
+b <- rep(0, p)
+b[QTL] <- 1
+signal <- X%*%b
+error <- rnorm(n=n,sd=sd(signal))
+y <- signal + error
+
+# set.seed(12345)
+m2 <- BRQRC(y = y, X = X, nIter = 10000, burnIn = 5000, probIn = 0.5,
+             thin = 10, save = TRUE,
+             file_betas = "betas_2.txt",
+             file_deltas = "deltas_2.txt")
+
+plot(m2$beta, 
+     xlab = "Variable", 
+     ylab = expression(hat(beta)[j]))
+
+plot(m2$d,
+     xlab = "Variable", 
+     ylab = expression("Inclusion probability"))
+
